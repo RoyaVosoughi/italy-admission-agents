@@ -7,6 +7,7 @@ import { shortlist } from "./ranking";
 import { checkIsee, equivalenceScale, estimateIsee } from "./isee";
 import { calendarRisks, planBackwards } from "./timeline";
 import { agencyFee, summariseClientCosts } from "./costs";
+import { stripDataKeyTags } from "../report/label";
 import { acceptanceEstimate } from "./chance";
 import { assertNoPii, findPii, redactPii } from "./pii";
 import { extractClaims } from "./claims";
@@ -358,8 +359,37 @@ test("acceptance estimate: monotonic, capped, wider when facts are unknown", () 
   const at = (score: number, features: typeof known | typeof unknown) => acceptanceEstimate({ score, features: features as never });
   assert.ok(at(30, known).pct < at(50, known).pct && at(50, known).pct < at(70, known).pct);
   assert.equal(at(50, known).pct, 50);
-  assert.equal(at(100, known).pct, 90, "never above 90%");
+  assert.equal(at(100, known).pct, 85, "never above 85%");
+  assert.equal(acceptanceEstimate({ score: 100, features: known as never }, { programmeNamed: false }).pct, 65, "capped lower when no programme is named");
   assert.equal(at(0, known).pct, 5, "never below 5%");
   const w = (e: { low: number; high: number }) => e.high - e.low;
   assert.ok(w(at(60, unknown)) > w(at(60, known)));
+});
+
+test("a chance percentage typed in prose is a hard failure; code-rendered blocks are exempt", () => {
+  const sec = (body: string) => REQUIRED_SECTIONS.map((s, i) => `## ${i + 1}. ${s}\n${i === 1 ? body : "x (client documents)."}`).join("\n\n");
+  const typed = checkReport(sec("Your chance at Pisa is about 58%."));
+  assert.ok(typed.failures.some((f) => f.rule === "chance-percent-in-prose"));
+  const rendered = checkReport(sec("<!-- computed -->\nYour chance is about 58%.\n<!-- /computed -->\nNext step: apply."));
+  assert.ok(!rendered.failures.some((f) => f.rule === "chance-percent-in-prose"));
+});
+
+test("a financial guarantee is not a promise; data-field citations become computed facts", () => {
+  const sec = (body: string) => REQUIRED_SECTIONS.map((s, i) => `## ${i + 1}. ${s}\n${i === 1 ? body : "x (client documents)."}`).join("\n\n");
+  assert.ok(!checkReport(sec("Entry is refused unless a financial guarantee is provided (KB: veneto#3).")).failures.some((f) => f.rule === "promise"));
+  assert.ok(checkReport(sec("We guarantee your admission (KB: veneto#3).")).failures.some((f) => f.rule === "promise"));
+  assert.equal(stripDataKeyTags("| CIMEA | 2027-01-24 | (KB: assessment, projected) |"), "| CIMEA | 2027-01-24 | (computed facts, projected) |");
+});
+
+test("translation check accepts a written-out date for an ISO date, and still catches changed numbers", () => {
+  const en = "## 1. A\nApply by 2027-09-04 and pay €120.";
+  const ok = checkTranslation(en, "## ۱. الف\nتا ۴ September 2027 درخواست دهید و €120 بپردازید.", []);
+  assert.deepEqual(ok.failures.filter((f) => f.startsWith("numbers")), []);
+  const bad = checkTranslation(en, "## ۱. الف\nتا ۵ September 2027 درخواست دهید و €120 بپردازید.", []);
+  assert.ok(bad.failures.some((f) => f.startsWith("numbers missing")));
+});
+
+test("data-field citations without the KB prefix also become computed facts", () => {
+  assert.equal(stripDataKeyTags("| CIMEA | 2027-01-24 | (assessment, expected) |"), "| CIMEA | 2027-01-24 | (computed facts, expected) |");
+  assert.equal(stripDataKeyTags("text (assessment)"), "text");
 });

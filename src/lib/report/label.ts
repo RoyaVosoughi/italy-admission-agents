@@ -26,5 +26,11 @@ export function autoLabel(md: string, usableUrls: Set<string>, intake: string): 
 
 /** The writer sometimes "cites" internal data field names — "(assessment)", "(shortlist)" — which mean nothing to a client. */
 export function stripDataKeyTags(md: string): string {
-  return md.replace(/\s?\((?:assessment|shortlist|client|scholarships?|costs|evidence|computedFacts|profile)\)/gi, "");
+  return md
+    .replace(/\s?\((?:assessment|shortlist|client|scholarships?|costs|evidence|computedFacts|profile)\)/gi, "")
+    // "(KB: assessment, projected)": a data field name is not a knowledge-base chunk; these values are
+    // computed by code (start-by dates, estimates), so cite them as computed facts and keep the label.
+    .replace(/\((?:KB:\s*)?(?:assessment|shortlist|client|scholarships?|costs|evidence|computedFacts|profile)\s*(?:,\s*([^)]*))?\)/gi, (_m, rest) =>
+      rest ? `(computed facts, ${rest.trim()})` : "(computed facts)",
+    );
 }

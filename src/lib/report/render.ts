@@ -10,6 +10,7 @@ import { acceptanceEstimate } from "../rules/chance";
 const computed = (md: string) => `${COMPUTED_START}\n${md}\n${COMPUTED_END}`;
 
 export const PLACEHOLDERS = {
+  canApply: "{{CAN_APPLY}}",
   shortlist: "{{SHORTLIST_TABLE}}",
   clientCosts: "{{CLIENT_COSTS_TABLE}}",
   fee: "{{FEE_TABLE}}",
@@ -20,13 +21,35 @@ const toman = (n: number) => `${n.toLocaleString("en-US")} toman`;
 const range = (min: number, max: number, f: (n: number) => string) => (min === max ? f(min) : `${f(min)} – ${f(max)}`);
 const cite = (source: string) => (/^[\w-]+#\d+$/.test(source) ? `(KB: ${source})` : source);
 
+/** A named programme, or the discipline (first two areas) plus a note that the exact programme is still to be confirmed. */
+function programmeLabel(c: { programName: string | null; programArea: string }): string {
+  if (c.programName) return c.programName;
+  const area = c.programArea.split(/,|;| and /).map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ");
+  return `${area} — exact programme to be confirmed`;
+}
+
+/** The answer to "where can this client apply and with what chance", rendered from the same numbers as the table. */
+export function canApplyLine(name: string, ranked: Ranked[]): string {
+  const parts = [...ranked]
+    .sort((a, b) => b.rating.score - a.rating.score)
+    .map(({ candidate: c, rating: r }) => {
+      const e = acceptanceEstimate(r, { programmeNamed: !!c.programName });
+      return `**${c.university}** (${programmeLabel(c)}) — about **${e.pct}%** (range ${e.low}–${e.high}%)`;
+    });
+  return computed(
+    `**${name} can apply to ${parts.length === 1 ? "this university" : `these ${parts.length} universities`}, most likely first:**\n\n${parts
+      .map((p, i) => `${i + 1}. ${p}`)
+      .join("\n")}\n\n*These percentages are estimates, not promises.*`,
+  );
+}
+
 export function shortlistTable(ranked: Ranked[], scholarships: ScholarshipResult[]): string {
   const sch = new Map(scholarships.map((s) => [s.plan.candidateId, s]));
   const rows = ranked.map(({ candidate: c, rating: r }, i) => {
     const s = sch.get(c.id);
     const top = [...r.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 3);
-    const e = acceptanceEstimate(r);
-    return `| ${i + 1} | ${c.university} (${c.city}) | ${c.programName ?? c.programArea} | ${c.language} | **${r.tier}** · about ${e.pct}% (range ${e.low}–${e.high}%) | ${top
+    const e = acceptanceEstimate(r, { programmeNamed: !!c.programName });
+    return `| ${i + 1} | ${c.university} (${c.city}) | ${programmeLabel(c)} | ${c.language} | **${r.tier}** · about ${e.pct}% (range ${e.low}–${e.high}%) | ${top
       .map((f) => `${f.points > 0 ? "+" : ""}${f.points} ${f.factor}`)
       .join("; ")} | ${s ? `${s.plan.dsuBody}: ${s.isee.verdict}` : "—"} |`;
   });

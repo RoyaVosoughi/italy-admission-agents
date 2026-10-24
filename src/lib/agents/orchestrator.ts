@@ -12,7 +12,7 @@ import { autoLabel, stripDataKeyTags } from "../report/label";
 import { missingCriticalFacts, profileFacts, VISA_FUNDS } from "../rules/profile";
 import { shortlist, type Ranked } from "../rules/ranking";
 import { checkReport } from "../rules/report-checks";
-import { clientCostTables, feeTable, fillPlaceholders, PLACEHOLDERS, shortlistTable } from "../report/render";
+import { canApplyLine, clientCostTables, feeTable, fillPlaceholders, PLACEHOLDERS, shortlistTable } from "../report/render";
 import { exportReport } from "../report/export";
 import { getStore } from "../store/file";
 import type { EvidenceRecord, Run, Step, Store } from "../store/types";
@@ -208,6 +208,7 @@ export async function executeRun(runId: string, input: RunInput, store: Store = 
       evidence: await store.listEvidence(runId),
     });
     const tables = () => ({
+      canApply: canApplyLine(profile.displayName, ranked),
       shortlist: shortlistTable(ranked, scholarships),
       clientCosts: clientCostTables(costs),
       fee: feeTable(costs),
@@ -499,6 +500,7 @@ function insertTables(draft: string, tables: Record<keyof typeof PLACEHOLDERS, s
   const { text, missing } = fillPlaceholders(draft, tables);
   let out = text;
   const sectionOf: Record<string, string> = {
+    [PLACEHOLDERS.canApply]: "Executive recommendation",
     [PLACEHOLDERS.shortlist]: "Recommended universities",
     [PLACEHOLDERS.clientCosts]: "Cost of the whole process",
     [PLACEHOLDERS.fee]: "Our service fee",

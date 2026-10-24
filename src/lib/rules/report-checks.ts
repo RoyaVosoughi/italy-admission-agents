@@ -1,6 +1,6 @@
 // Hard checks on the English report. A failure here blocks
 // approval no matter what the Manager says (plan §4.2).
-import { extractClaims } from "./claims";
+import { COMPUTED_END, COMPUTED_START, extractClaims } from "./claims";
 import { findPii } from "./pii";
 
 export const REQUIRED_SECTIONS = [
@@ -47,8 +47,15 @@ export function checkReport(md: string, opts: { unverifiedClaimIds?: Set<string>
 
   for (const m of md.matchAll(PROMISE)) {
     const before = md.slice(Math.max(0, m.index! - 40), m.index!);
+    // "financial guarantee" / "bank guarantee" are visa documents, not a promise of admission
+    if (/\b(?:financial|bank|personal|parental|sponsor(?:ship)?)\s$/i.test(before) || /^guarantees? (?:letter|deposit|is provided|provided)/i.test(md.slice(m.index!, m.index! + 40))) continue;
     if (!NEGATION.test(before)) failures.push({ rule: "promise", detail: `"${md.slice(Math.max(0, m.index! - 30), m.index! + 30).trim()}"` });
   }
+
+  // Acceptance percentages come only from code-rendered blocks; one typed by the writer can contradict them.
+  const prose = md.replace(new RegExp(`${COMPUTED_START}[\\s\\S]*?${COMPUTED_END}`, "g"), "");
+  const typedChance = prose.match(/(?:chance|probability|likelihood|acceptance)[^.\n]{0,60}\b\d{1,3}\s?%|\b\d{1,3}\s?%[^.\n]{0,40}(?:chance|probability|likelihood|acceptance)/i);
+  if (typedChance) failures.push({ rule: "chance-percent-in-prose", detail: `"${typedChance[0].trim()}" — refer to the table instead of typing a percentage` });
 
   for (const p of findPii(md)) failures.push({ rule: "pii", detail: `${p.kind}: ${p.match}` });
 

@@ -29,12 +29,18 @@ export function tierOf(score: number): Tier {
  * certain, with a wider range when the evidence left factors unknown. Once real outcomes are recorded
  * (Outcomes tab) the curve can be calibrated against them.
  */
-export function acceptanceEstimate(r: { score: number; features: ChanceFeatures }): { pct: number; low: number; high: number } {
+export function acceptanceEstimate(
+  r: { score: number; features: ChanceFeatures },
+  opts: { programmeNamed?: boolean } = {},
+): { pct: number; low: number; high: number } {
   const f = r.features;
+  const named = opts.programmeNamed ?? true;
   const unknown =
     [f.competitiveness, f.nonEuQuota, f.prerequisites, f.entranceTest].filter((v) => v === "unknown").length + (f.gpaRequirement30 == null ? 1 : 0);
-  const pct = Math.round(Math.min(90, Math.max(5, 100 / (1 + Math.exp(-(r.score - 50) / 14)))));
-  const spread = 8 + 3 * unknown;
+  // No specific programme identified yet: the requirements this score rests on are a guess, so keep it modest.
+  const cap = named ? 85 : 65;
+  const pct = Math.round(Math.min(cap, Math.max(5, 100 / (1 + Math.exp(-(r.score - 50) / 14)))));
+  const spread = 8 + 3 * unknown + (named ? 0 : 6);
   return { pct, low: Math.max(1, pct - spread), high: Math.min(95, pct + spread) };
 }
 

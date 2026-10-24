@@ -19,6 +19,9 @@ Rules:
 - Old Iranian system: diploma (11 years) + Pish-Daneshgahi = 12 years of schooling; new 6-3-3 system = 12.
 - If the intake year is not stated, use the intake given in the request.
 - Persian text: translate field names and institutions to English.
+- targetFields: the broad subject areas the client wants (from the CV's objective or the advisor's notes, e.g.
+  "international law", "security studies"). A programme named in an existing admission letter is one option
+  the client already holds, not the only field: describe the discipline, never one university's programme title.
 - preferences.cities / preferences.regions: ONLY places the client or advisor says they want. An admission
   letter, offer or previous application is a fact about the past, not a preference — never copy its city or
   region into preferences (leave them empty when the client names no place).

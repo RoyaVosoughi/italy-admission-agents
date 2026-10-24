@@ -129,7 +129,7 @@ export function RunView({ id }: { id: string }) {
   );
 }
 
-type RankedLite = { candidate?: { university?: string; city?: string }; rating?: { tier?: string; score?: number; features?: unknown } };
+type RankedLite = { candidate?: { university?: string; city?: string; programName?: string | null }; rating?: { tier?: string; score?: number; features?: unknown } };
 
 /** The shortlist as polaroids — only universities we have a photo for (matched by name). */
 function Shortlist({ steps }: { steps: Step[] }) {
@@ -139,7 +139,7 @@ function Shortlist({ steps }: { steps: Step[] }) {
       name: r.candidate?.university ?? "",
       city: r.candidate?.city ?? "",
       tier: r.rating?.tier,
-      pct: r.rating?.features ? acceptanceEstimate(r.rating as Parameters<typeof acceptanceEstimate>[0]).pct : null,
+      pct: r.rating?.features ? acceptanceEstimate(r.rating as Parameters<typeof acceptanceEstimate>[0], { programmeNamed: !!r.candidate?.programName }).pct : null,
       key: uniKey(r.candidate?.university ?? ""),
     }))
     .filter((c): c is typeof c & { key: string } => !!c.key);

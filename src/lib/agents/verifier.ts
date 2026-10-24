@@ -34,6 +34,9 @@ that states the current value. Output one Evidence item per fact:
 - status: verified (page confirms the KB value for ${intake}), changed (page gives a different value
   for ${intake}), not_found (no page states it, or only for an older year), conflict (pages disagree).
 Never mark verified on the basis of a page about an older academic year.
+The page must belong to the SAME institution the fact names. Separate institutions in the same city do not
+count for each other: Università di Pisa is not Scuola Superiore Sant'Anna or Scuola Normale Superiore;
+Università di Milano is not Politecnico di Milano or Milano-Bicocca. A page of another institution is not_found.
 For a fact that a programme EXISTS, the programme's own page title/heading or its line in a course list is
 enough (the year doesn't matter for existence); quote that heading together with the words around it.
 `;

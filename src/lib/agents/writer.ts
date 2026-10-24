@@ -30,11 +30,10 @@ Structure — use exactly these level-2 headings, numbered, in this order:
 ${REQUIRED_SECTIONS.map((s, i) => `## ${i + 1}. ${s}`).join("\n")}
 
 Mandatory content:
-- "Executive recommendation": open with ONE plain sentence that answers the client's question: which
-  universities they can apply to and the estimated chance at each, most likely first, in the form
-  "<Name> can apply to <University A> (about 60%), <University B> (about 45%) …" using exactly the
-  percentages in the ranked table, then (computed facts). Follow with the main risk and the single most
-  important next step. Say that the percentages are estimates, not promises.
+- "Executive recommendation": put the placeholder ${PLACEHOLDERS.canApply} on its own line first (code
+  inserts the list "can apply to … about N%"), then write the main risk and the single most important next
+  step. NEVER write an acceptance percentage yourself, anywhere: the percentages exist only in the code-inserted
+  blocks, and a percentage you type can contradict them.
 - "Recommended universities": put the placeholder ${PLACEHOLDERS.shortlist} on its own line (code
   inserts the ranked table), then 2–4 sentences per university on why it fits and what limits the chance.
 - "Cost of the whole process": put ${PLACEHOLDERS.clientCosts} on its own line, plus a short explanation.
