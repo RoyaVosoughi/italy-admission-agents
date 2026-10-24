@@ -1,0 +1,42 @@
+{
+  "name": "italy-admission-agents",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack -p 3100",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint",
+    "kb:clean": "tsx scripts/clean-kb.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "kb:index": "tsx --env-file=.env.local scripts/index-kb.ts",
+    "eval:retrieval": "tsx --env-file=.env.local scripts/eval-retrieval.ts",
+    "smoke:ai": "tsx --env-file=.env.local scripts/smoke-ai.ts",
+    "client": "tsx --env-file=.env.local scripts/run-client.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.77",
+    "@huggingface/transformers": "^4.3.1",
+    "@phosphor-icons/react": "^2.1.10",
+    "ai": "^7.0.150",
+    "mammoth": "^1.13.0",
+    "marked": "^18.1.1",
+    "next": "15.5.28",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "unpdf": "^1.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.28",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}
