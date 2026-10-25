@@ -33,7 +33,8 @@ const MATCH: [RegExp, string][] = [
   [/pavia/i, "pavia"],
   [/genova|genoa/i, "genova"],
   [/ca'? ?foscari/i, "cafoscari"],
-  [/milan(o)?(?!\s*-?\s*bicocca)/i, "statale-milano"],
+  // only the state university: Bocconi, Cattolica, IULM, Bicocca, San Raffaele and Humanitas are other institutions
+  [/^(?!.*(bocconi|cattolica|iulm|bicocca|raffaele|humanitas|politecnico)).*milan(o)?/i, "statale-milano"],
   [/bari/i, "bari"],
   [/palermo/i, "palermo"],
 ];

@@ -25,6 +25,8 @@ Rules:
 - preferences.cities / preferences.regions: ONLY places the client or advisor says they want. An admission
   letter, offer or previous application is a fact about the past, not a preference — never copy its city or
   region into preferences (leave them empty when the client names no place).
+- existingOffers: every admission letter or offer the documents show the client ALREADY holds (university,
+  programme title exactly as written, academic year such as "2026/27"). Empty when there is none.
 - family.* in toman, only if the note states it (used later for the ISEE estimate).
 `;
 

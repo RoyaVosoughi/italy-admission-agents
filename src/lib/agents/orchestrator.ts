@@ -233,7 +233,7 @@ export async function executeRun(runId: string, input: RunInput, store: Store = 
       evidence: await store.listEvidence(runId),
     });
     const tables = () => ({
-      canApply: canApplyLine(profile.displayName, ranked),
+      canApply: canApplyLine(profile.displayName, ranked, profile.existingOffers, ctx.intake),
       shortlist: shortlistTable(ranked, scholarships),
       clientCosts: clientCostTables(costs),
       fee: feeTable(costs),

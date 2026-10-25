@@ -184,40 +184,52 @@ function withDeadline<T>(agent: AgentName, p: (signal: AbortSignal) => Promise<T
   return Promise.race([p(ctrl.signal), deadline]).finally(() => clearTimeout(timer));
 }
 
+/** A provider outage ("503 service unavailable") usually passes within a minute: wait and go round again. */
+const OUTAGE_WAITS_S = [20, 45, 90];
+
 async function complete(call: AgentCall, instructions: string, messages: ModelMessage[]) {
-  const chain = candidates(call.agent);
-  if (!chain.length) throw new ModelUnavailable(`${call.agent}: no model available (all daily quotas used up, or no API key set)`);
-  let last: unknown;
-  for (const c of chain) {
-    try {
-      const res = await withRateLimitRetry(call.agent, c.model, () =>
-        withDeadline(call.agent, (signal) =>
-          generateText({
-            model: provider(c.provider, call.effort ?? "low")(c.model),
-            instructions,
-            messages,
-            temperature: call.temperature,
-            maxOutputTokens: call.maxOutputTokens ?? 8000,
-            maxRetries: 0, // rate limits and timeouts are handled by withRateLimitRetry
-            abortSignal: signal,
-          }),
-        ),
-      );
-      return {
-        text: res.text,
-        usage: { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0, calls: 1 },
-      };
-    } catch (e) {
-      const status = statusOf(e);
-      const transient = status !== undefined && status >= 500;
-      const switchable = e instanceof ModelUnavailable || transient || (status !== undefined && [401, 403, 404].includes(status));
-      if (!switchable) throw e;
-      unavailableUntil.set(candidateId(c), Date.now() + (transient ? 2 * 60_000 : RECHECK_MS));
-      console.warn(`  ${call.agent}: ${candidateId(c)} unavailable (${status ?? "quota"}), switching to the next model…`);
-      last = e;
+  for (let round = 0; ; round++) {
+    const chain = candidates(call.agent);
+    if (!chain.length) throw new ModelUnavailable(`${call.agent}: no model available (all daily quotas used up, or no API key set)`);
+    let last: unknown;
+    let onlyOutages = true;
+    for (const c of chain) {
+      try {
+        const res = await withRateLimitRetry(call.agent, c.model, () =>
+          withDeadline(call.agent, (signal) =>
+            generateText({
+              model: provider(c.provider, call.effort ?? "low")(c.model),
+              instructions,
+              messages,
+              temperature: call.temperature,
+              maxOutputTokens: call.maxOutputTokens ?? 8000,
+              maxRetries: 0, // rate limits and timeouts are handled by withRateLimitRetry
+              abortSignal: signal,
+            }),
+          ),
+        );
+        return {
+          text: res.text,
+          usage: { inputTokens: res.usage.inputTokens ?? 0, outputTokens: res.usage.outputTokens ?? 0, calls: 1 },
+        };
+      } catch (e) {
+        const status = statusOf(e);
+        const transient = status !== undefined && status >= 500;
+        const switchable = e instanceof ModelUnavailable || transient || (status !== undefined && [401, 403, 404].includes(status));
+        if (!switchable) throw e;
+        // An outage is not remembered (it passes); a used-up quota or a dead key is (until tomorrow / 30 min).
+        if (!transient) {
+          onlyOutages = false;
+          unavailableUntil.set(candidateId(c), Date.now() + RECHECK_MS);
+        }
+        console.warn(`  ${call.agent}: ${candidateId(c)} unavailable (${status ?? "quota"}), switching to the next model…`);
+        last = e;
+      }
     }
+    if (!onlyOutages || round >= OUTAGE_WAITS_S.length) throw last;
+    console.warn(`  ${call.agent}: every model is temporarily unavailable, waiting ${OUTAGE_WAITS_S[round]}s…`);
+    await sleep(OUTAGE_WAITS_S[round] * 1000);
   }
-  throw last;
 }
 
 export async function runAgentText(call: AgentCall): Promise<{ text: string; usage: Usage }> {

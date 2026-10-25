@@ -11,6 +11,8 @@ You are an admissions analyst. For ONE candidate programme, read the evidence an
 admission factor for this client. Be conservative: when the evidence is silent, use "unknown" rather
 than an optimistic value.
 
+- Candidates from the official MUR catalogue state their access type in whyFit: "accesso libero" means no
+  entrance test (entranceTest none); "locale" or "nazionale" means a limited-places admission test is required.
 - fieldMatch: compare the PROGRAMME's discipline with the discipline of the client's COMPLETED degree (not with
   what the client wishes to study). exact = same discipline (a law graduate applying to a law master's);
   related = adjacent, prerequisites likely partly covered (a law graduate applying to international relations

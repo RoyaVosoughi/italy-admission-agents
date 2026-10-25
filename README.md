@@ -28,6 +28,21 @@ Run statuses: `approved` (report saved) · `needs_input` (a critical fact is mis
 start again with it in the notes) · `blocked` (the Manager couldn't verify the report; the reason and the
 evidence are in the studio) · `error`.
 
+## The programme catalogue (how universities are chosen)
+
+The scout does not guess programmes from the scholarship reports. It searches the **official MUR list of every
+degree course in Italy** (open data, public domain): English-taught, in-person master's courses (or bachelor's)
+that match the client's degree classes and subject. Ranking is done by code, so the same resume always gets the
+same shortlist; the models only rate the chances afterwards. A programme the client already holds an admission
+letter for is added as well, because the list ends at the last published academic year and misses brand-new courses.
+
+```bash
+npm run catalogue:build   # downloads the MUR file (~17 MB) and writes data/catalogue/programmes.json
+```
+
+Run it once after cloning, and again each year when MUR publishes the next file. Without it the scout falls back
+to the knowledge-base reports only (and says so in the log).
+
 ## When the regional reports change
 
 ```bash

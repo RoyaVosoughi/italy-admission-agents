@@ -4,6 +4,7 @@
 //   3. the LLM picks candidates ONLY from the retrieved evidence, citing chunk ids.
 import { z } from "zod";
 import { runAgentJSON } from "../ai";
+import { loadCatalogue, searchProgrammes, tokens, type Programme } from "../catalogue/catalogue";
 import { ScoutOutput, type Assessment, type Candidate, type ClientProfile } from "./types";
 import { formatChunks, json, uniqueHits, type RunContext } from "./context";
 
@@ -39,7 +40,79 @@ afterwards and it is dropped automatically if not found. Aim for at least 8 cand
 Candidate ids: short slugs like "polito-civil".
 `;
 
+const slug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const MAX_CANDIDATES = () => Number(process.env.SCOUT_MAX ?? 10);
+
+/**
+ * Candidates from the official MUR course list: every English-taught in-person programme in the client's
+ * degree classes or subject, ranked by code, so the same resume always gets the same, complete shortlist.
+ * Programmes the client already holds an offer for are added too, even when the list (which ends at the
+ * last published academic year) does not contain them yet. Returns null when the list is not available.
+ */
+async function catalogueCandidates(ctx: RunContext, profile: ClientProfile, assessment: Assessment): Promise<Candidate[] | null> {
+  const all = loadCatalogue();
+  const level = profile.targetLevel === "master" ? "master" : profile.targetLevel === "bachelor" ? "bachelor" : null;
+  if (!all || !level) return null;
+
+  const found = searchProgrammes(all, {
+    level,
+    classCodes: assessment.degreeClasses.map((d) => d.code),
+    keywords: [...assessment.searchThemes, ...profile.targetFields],
+    language: profile.preferences.languageOfInstruction,
+    cities: profile.preferences.cities,
+    regions: profile.preferences.regions,
+    limit: MAX_CANDIDATES(),
+  });
+  if (!found.length) return null;
+
+  const evidenceFor = async (university: string, region: string) =>
+    (await ctx.retriever.search(`${university} ${region} international students admission scholarship`, { k: 3, regions: [region], docTypes: ["regional"] })).map((h) => h.chunk.id);
+
+  const out: Candidate[] = [];
+  for (const { programme: p, reasons } of found) {
+    out.push({
+      id: `${slug(p.ateneo)}-${slug(p.classCode)}-${slug(p.name).slice(0, 28)}`,
+      university: p.university,
+      city: p.city,
+      region: p.region,
+      programArea: p.className,
+      programName: p.name,
+      language: p.language === "italian" ? "italian" : "english",
+      whyFit: `Official MUR course list ${p.year}/${String((p.year + 1) % 100).padStart(2, "0")}: ${p.className} (${p.classCode}), ${
+        p.language === "bilingual" ? "taught in Italian and English" : p.language === "english" ? "taught in English" : "taught in Italian"
+      }, ${p.access === "accesso libero" ? "open access (no entrance test)" : `limited places (${p.access} admission test)`}, in person. ${reasons.join("; ")}.`,
+      sourceChunkIds: await evidenceFor(p.university, p.region),
+      needsWebCheck: false, // the programme exists: it is in the official list
+    });
+  }
+
+  // An admission the client already holds is always part of the picture.
+  const clean = (u: string) => tokens(u.replace(/universit\w*|degli studi|studi di|university|of|the/gi, " ")).join(" ");
+  for (const offer of profile.existingOffers ?? []) {
+    const key = clean(offer.university);
+    if (!key || out.some((c) => clean(c.university) === key && offer.programme && tokens(c.programName ?? "").join(" ") === tokens(offer.programme).join(" "))) continue;
+    const known: Programme | undefined = all.find((p) => clean(p.university) === key || clean(p.university).includes(key) || key.includes(clean(p.university)));
+    if (!known) continue; // cannot place it in a region: the report still mentions the offer
+    out.push({
+      id: `offer-${slug(known.ateneo)}-${slug(offer.programme ?? "programme").slice(0, 28)}`,
+      university: known.university,
+      city: known.city,
+      region: known.region,
+      programArea: offer.programme ?? profile.targetFields.join(", "),
+      programName: offer.programme,
+      language: "english",
+      whyFit: `The client already holds an admission letter from ${known.university}${offer.programme ? ` for ${offer.programme}` : ""}${offer.academicYear ? ` (academic year ${offer.academicYear})` : ""}.`,
+      sourceChunkIds: await evidenceFor(known.university, known.region),
+      needsWebCheck: true, // new programmes are not in the list yet: confirm on the university's site
+    });
+  }
+  return out;
+}
+
 export async function runScout(ctx: RunContext, profile: ClientProfile, assessment: Assessment): Promise<Candidate[]> {
+  const fromCatalogue = await catalogueCandidates(ctx, profile, assessment);
+  if (fromCatalogue) return fromCatalogue;
+  console.warn("  scout: official course list not available (npm run catalogue:build), searching the knowledge base only");
   const lessons = await ctx.lessons("scout");
   const plan = await runAgentJSON(QueryPlan, {
     agent: "scout",

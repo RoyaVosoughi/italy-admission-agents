@@ -42,7 +42,8 @@ const profile: ClientProfile = {
   budgetEurPerYear: null,
   family: { householdSize: 4, annualIncomeToman: null, assetsToman: null },
   preferences: { cities: ["Turin"], regions: [], languageOfInstruction: "english" },
-  missing: [],
+  existingOffers: [],
+    missing: [],
 };
 
 const features = (o: Partial<ChanceFeatures> = {}): ChanceFeatures => ({

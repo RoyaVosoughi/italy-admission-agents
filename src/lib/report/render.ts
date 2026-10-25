@@ -29,17 +29,33 @@ function programmeLabel(c: { programName: string | null; programArea: string }):
 }
 
 /** The answer to "where can this client apply and with what chance", rendered from the same numbers as the table. */
-export function canApplyLine(name: string, ranked: Ranked[]): string {
+export function canApplyLine(
+  name: string,
+  ranked: Ranked[],
+  offers: { university: string; programme: string | null; academicYear: string | null }[] = [],
+  intake = "",
+): string {
   const parts = [...ranked]
     .sort((a, b) => b.rating.score - a.rating.score)
     .map(({ candidate: c, rating: r }) => {
       const e = acceptanceEstimate(r, { programmeNamed: !!c.programName });
       return `**${c.university}** (${programmeLabel(c)}) — about **${e.pct}%** (range ${e.low}–${e.high}%)`;
     });
+  const held = offers.map((o) => {
+    const startYear = Number(o.academicYear?.slice(0, 4));
+    const intakeYear = Number(intake.slice(0, 4));
+    const past = Number.isFinite(startYear) && Number.isFinite(intakeYear) && startYear < intakeYear;
+    return `**${name} already holds an admission letter** from ${o.university}${o.programme ? ` for ${o.programme}` : ""}${
+      o.academicYear ? ` (academic year ${o.academicYear})` : ""
+    }.${past ? ` That intake has already started, so for ${intake} a new application is needed.` : ""}`;
+  });
   return computed(
-    `**${name} can apply to ${parts.length === 1 ? "this university" : `these ${parts.length} universities`}, most likely first:**\n\n${parts
-      .map((p, i) => `${i + 1}. ${p}`)
-      .join("\n")}\n\n*These percentages are estimates, not promises.*`,
+    [
+      ...held,
+      `**${name} can apply to ${parts.length === 1 ? "this university" : `these ${parts.length} universities`}, most likely first:**\n\n${parts
+        .map((p, i) => `${i + 1}. ${p}`)
+        .join("\n")}\n\n*These percentages are estimates, not promises.*`,
+    ].join("\n\n"),
   );
 }
 
@@ -49,7 +65,7 @@ export function shortlistTable(ranked: Ranked[], scholarships: ScholarshipResult
     const s = sch.get(c.id);
     const top = [...r.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 3);
     const e = acceptanceEstimate(r, { programmeNamed: !!c.programName });
-    return `| ${i + 1} | ${c.university} (${c.city}) | ${programmeLabel(c)} | ${c.language} | **${r.tier}** · about ${e.pct}% (range ${e.low}–${e.high}%) | ${top
+    return `| ${i + 1} | ${c.university}${c.university.toLowerCase().includes(c.city.toLowerCase()) ? "" : ` (${c.city})`} | ${programmeLabel(c)} | ${c.language} | **${r.tier}** · about ${e.pct}% (range ${e.low}–${e.high}%) | ${top
       .map((f) => `${f.points > 0 ? "+" : ""}${f.points} ${f.factor}`)
       .join("; ")} | ${s ? `${s.plan.dsuBody}: ${s.isee.verdict}` : "—"} |`;
   });

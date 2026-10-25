@@ -12,7 +12,8 @@
     "kb:index": "tsx --env-file=.env.local scripts/index-kb.ts",
     "eval:retrieval": "tsx --env-file=.env.local scripts/eval-retrieval.ts",
     "smoke:ai": "tsx --env-file=.env.local scripts/smoke-ai.ts",
-    "client": "tsx --env-file=.env.local scripts/run-client.ts"
+    "client": "tsx --env-file=.env.local scripts/run-client.ts",
+    "catalogue:build": "tsx scripts/build-catalogue.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.77",

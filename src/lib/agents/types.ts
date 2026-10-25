@@ -52,6 +52,10 @@ export const ClientProfile = z.object({
     regions: z.array(z.string()),
     languageOfInstruction: z.enum(["english", "italian", "either"]),
   }),
+  existingOffers: z
+    .array(z.object({ university: z.string(), programme: z.string().nullable(), academicYear: z.string().nullable() }))
+    .default([])
+    .describe("admission letters or offers the client already holds"),
   missing: z.array(z.string()).describe("critical facts not found in the documents"),
 });
 export type ClientProfile = z.infer<typeof ClientProfile>;
