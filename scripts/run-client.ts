@@ -1,6 +1,6 @@
 // Runs the whole pipeline for one client from the command line.
 // Usage: npm run client -- <client-folder> <document> [more documents…] [--rate <toman per EUR>] [--notes "…"]
-import { executeRun, startRun } from "../src/lib/agents/orchestrator";
+import { executeRun, findReusableRun, startRun } from "../src/lib/agents/orchestrator";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -8,12 +8,19 @@ async function main() {
     const i = args.indexOf(name);
     return i >= 0 ? args.splice(i, 2)[1] : undefined;
   };
+  const force = args.includes("--force");
+  if (force) args.splice(args.indexOf("--force"), 1);
   const rate = flag("--rate");
   const notes = flag("--notes");
   const [clientFolder, ...documents] = args;
   if (!clientFolder || !documents.length) throw new Error("usage: npm run client -- <client-folder> <document> [...]");
 
-  const input = { clientFolder, documents, notes, tomanPerEur: rate ? Number(rate) : undefined };
+  const input = { clientFolder, documents, notes, tomanPerEur: rate ? Number(rate) : undefined, force };
+  const existing = await findReusableRun(input);
+  if (existing) {
+    console.log(`Same documents were already assessed (run ${existing.id}, ${existing.status}). Showing the saved result; add --force to run again.`);
+    return;
+  }
   const run = await startRun(input);
   console.log(`run ${run.id} started`);
   const done = await executeRun(run.id, input);

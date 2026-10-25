@@ -21,7 +21,9 @@ export interface Run {
   id: string;
   clientId: string;
   status: RunStatus;
-  inputs: { documents: string[]; notes?: string; today: string };
+  inputs: { documents: string[]; notes?: string; today: string; tomanPerEur?: number };
+  /** Hash of the documents + notes + rate + intake: the same fingerprint for the same client means the same result. */
+  fingerprint?: string;
   steps: Step[];
   managerRounds: number;
   reportId?: string;

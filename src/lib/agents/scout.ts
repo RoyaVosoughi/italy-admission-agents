@@ -45,7 +45,7 @@ export async function runScout(ctx: RunContext, profile: ClientProfile, assessme
     agent: "scout",
     role: QUERY_ROLE,
     prompt: `Target: ${profile.targetLevel} in ${profile.targetFields.join(", ")}\nThemes: ${assessment.searchThemes.join(", ")}\nPreferences: ${json(profile.preferences)}`,
-    temperature: 0.5,
+    temperature: 0.2,
     lessons,
   });
   ctx.addUsage(plan.usage);
@@ -64,7 +64,7 @@ export async function runScout(ctx: RunContext, profile: ClientProfile, assessme
       `Assessment themes: ${assessment.searchThemes.join(", ")}; degree classes: ${assessment.degreeClasses.map((d) => d.code).join(", ")}.`,
       `Knowledge-base excerpts:\n\n${formatChunks(hits, 40_000)}`,
     ].join("\n\n"),
-    temperature: 0.5,
+    temperature: 0.2,
     lessons,
   });
   ctx.addUsage(pick.usage);

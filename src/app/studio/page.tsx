@@ -2,7 +2,7 @@
 // Studio — a monitoring screen, not an approval screen: Leonardo, the Director agent, approves.
 // Start an assessment, follow the team live, read the report with its evidence, see what each
 // agent has learned, and record real outcomes.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChartBar, ListChecks, PlusCircle, UsersThree, type Icon } from "@phosphor-icons/react";
 import { AgentAvatar, persona } from "./personas";
 import { NewRun, Outcomes } from "./Forms";
@@ -25,6 +25,19 @@ export default function Studio() {
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [openClient, setOpenClient] = useState<string | null>(null);
+
+  // One row per client: the newest run; earlier runs of the same client sit in a history under it.
+  const groups = useMemo(() => {
+    const map = new Map<string, RunRow[]>();
+    for (const r of runs ?? []) map.set(r.clientId, [...(map.get(r.clientId) ?? []), r]);
+    // The row shows a run in progress first, else the newest useful result, and only then a failure.
+    return [...map.values()].map((list) => {
+      const head = list.find((r) => r.status === "running") ?? list.find((r) => r.status === "approved" || r.status === "needs_input") ?? list[0];
+      return { latest: head, earlier: list.filter((r) => r !== head) };
+    });
+  }, [runs]);
 
   // Deep links: ?tab=team · ?run=<id>&view=director — and the URL follows what you open.
   useEffect(() => {
@@ -91,7 +104,8 @@ export default function Studio() {
       <main id="main" className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 sm:py-12">
         {tab === "new" && (
           <NewRun
-            onStarted={(id) => {
+            onStarted={(id, reused) => {
+              setNotice(reused ? "These documents were already assessed, so this is the saved result — the same answer every time. Use “Run again” on the assessment if you want a fresh run." : null);
               setSelected(id);
               setTab("runs");
               loadRuns();
@@ -119,9 +133,9 @@ export default function Studio() {
                 </div>
               ) : (
                 <ul className="space-y-2">
-                  {runs.map((r, i) => (
-                    // On phones only the 4 most recent are shown, so the selected report stays near the top.
-                    <li key={r.id} className={!showAll && i >= 4 && r.id !== selected ? "max-lg:hidden" : ""}>
+                  {groups.map(({ latest: r, earlier }, i) => (
+                    // On phones only the 4 most recent clients are shown, so the selected report stays near the top.
+                    <li key={r.id} className={!showAll && i >= 4 && r.id !== selected && !earlier.some((e) => e.id === selected) ? "max-lg:hidden" : ""}>
                       <button
                         onClick={() => setSelected(r.id)}
                         aria-current={selected === r.id ? "true" : undefined}
@@ -136,22 +150,54 @@ export default function Studio() {
                         <div className="mt-1 text-xs text-stone-600">{timeAgo(r.createdAt)}</div>
                         {r.status === "running" && r.lastStep && <CurrentStep label={r.lastStep} />}
                       </button>
+                      {earlier.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => setOpenClient(openClient === r.clientId ? null : r.clientId)}
+                            aria-expanded={openClient === r.clientId}
+                            className="mt-1 min-h-11 w-full cursor-pointer rounded-xl px-3 text-start text-xs font-medium text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
+                          >
+                            {openClient === r.clientId ? "Hide" : "Show"} {earlier.length} earlier {earlier.length === 1 ? "run" : "runs"}
+                          </button>
+                          {openClient === r.clientId && (
+                            <ul className="mb-1 space-y-1 ps-3">
+                              {earlier.map((e) => (
+                                <li key={e.id}>
+                                  <button
+                                    onClick={() => setSelected(e.id)}
+                                    aria-current={selected === e.id ? "true" : undefined}
+                                    className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2 text-start text-xs ${selected === e.id ? "shadow-[0_0_0_1.5px_var(--ink)]" : "shadow-[var(--shadow-card)]"}`}
+                                  >
+                                    <span className="text-stone-600">{timeAgo(e.createdAt)}</span>
+                                    <StatusChip s={e.status} />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
-              {runs && runs.length > 4 && (
+              {groups.length > 4 && (
                 <button
                   onClick={() => setShowAll((v) => !v)}
                   aria-expanded={showAll}
                   className="mt-2 min-h-11 w-full cursor-pointer rounded-xl text-sm font-bold text-[var(--brand)] hover:bg-white focus-visible:outline-2 focus-visible:outline-[var(--brand)] lg:hidden"
                 >
-                  {showAll ? "Show fewer" : `Show all ${runs.length} assessments`}
+                  {showAll ? "Show fewer" : `Show all ${groups.length} clients`}
                 </button>
               )}
             </aside>
             <section aria-label="Assessment detail" className="min-w-0">
-              {selected ? <RunView id={selected} /> : <p className="text-sm text-stone-600">Select an assessment.</p>}
+              {notice && (
+                <p role="status" className="mb-4 rounded-2xl bg-[var(--sky)] p-4 text-sm text-stone-800">
+                  {notice}
+                </p>
+              )}
+              {selected ? <RunView id={selected} onRunAgain={(id) => { setSelected(id); setNotice(null); loadRuns(); }} /> : <p className="text-sm text-stone-600">Select an assessment.</p>}
             </section>
           </div>
         )}

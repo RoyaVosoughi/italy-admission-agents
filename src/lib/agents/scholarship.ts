@@ -60,7 +60,7 @@ export async function runScholarship(
       opts.correction ? `Manager's correction order (must be addressed): ${opts.correction}` : "",
       `Excerpts:\n\n${formatChunks(uniqueHits(regional, uni, national), 28_000)}`,
     ].join("\n\n"),
-    temperature: 0.4,
+    temperature: 0.2,
     lessons: await ctx.lessons("scholarship"),
   });
   ctx.addUsage(usage);

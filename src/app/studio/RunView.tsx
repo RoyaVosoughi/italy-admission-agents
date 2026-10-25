@@ -41,7 +41,7 @@ type Detail = {
 
 type View = "pipeline" | "en" | "fa" | "evidence" | "director";
 
-export function RunView({ id }: { id: string }) {
+export function RunView({ id, onRunAgain }: { id: string; onRunAgain: (newId: string) => void }) {
   const [d, setD] = useState<Detail | null>(null);
   const [view, setViewState] = useState<View>(() => {
     if (typeof window === "undefined") return "pipeline";
@@ -91,7 +91,21 @@ export function RunView({ id }: { id: string }) {
             <h2 className="display text-4xl">{run.clientId}</h2>
             <p className="text-sm text-stone-600">Started {timeAgo(run.createdAt)}</p>
           </div>
-          <StatusChip s={run.status} />
+          <div className="flex items-center gap-2">
+            {run.status !== "running" && (
+              <button
+                onClick={async () => {
+                  if (!confirm("Run this client's assessment again from scratch? It takes about 15–30 minutes and uses model quota. The saved result stays in the history.")) return;
+                  const res = await fetch(`/api/runs/${run.id}/rerun`, { method: "POST" });
+                  if (res.ok) onRunAgain(((await res.json()) as { id: string }).id);
+                }}
+                className="min-h-11 cursor-pointer rounded-full px-3.5 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
+              >
+                Run again
+              </button>
+            )}
+            <StatusChip s={run.status} />
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat Icon={Brain} label="Model calls" value={run.usage.llmCalls} hint={`${Math.round((run.usage.inputTokens + run.usage.outputTokens) / 1000)}k tokens`} />

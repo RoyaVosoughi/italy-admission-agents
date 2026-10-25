@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
 import { NextResponse } from "next/server";
-import { executeRun, startRun, type RunInput } from "@/lib/agents/orchestrator";
+import { executeRun, findReusableRun, startRun, type RunInput } from "@/lib/agents/orchestrator";
 import { getStore } from "@/lib/store/file";
 
 export const runtime = "nodejs";
@@ -35,6 +35,9 @@ export async function POST(req: Request) {
     notes: String(form.get("notes") ?? "") || undefined,
     tomanPerEur: rate > 0 ? rate : undefined,
   };
+  // Same documents for the same client: hand back the saved result instead of running everything again.
+  const existing = await findReusableRun(input);
+  if (existing) return NextResponse.json({ ...existing, reused: true }, { status: 200 });
   const run = await startRun(input);
   // Fire and forget: the studio polls GET /api/runs/[id] for live progress.
   void executeRun(run.id, input);

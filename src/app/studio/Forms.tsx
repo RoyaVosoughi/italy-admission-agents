@@ -5,7 +5,7 @@ import { AGENT_ORDER, AgentAvatar, PERSONAS } from "./personas";
 import { Card, btnPrimary, field } from "./ui";
 import { HeroCollage } from "./universities";
 
-export function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
+export function NewRun({ onStarted }: { onStarted: (id: string, reused: boolean) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
@@ -18,7 +18,7 @@ export function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
     const json = await res.json();
     setBusy(false);
     if (!res.ok) return setError(json.error);
-    onStarted(json.id);
+    onStarted(json.id, !!json.reused);
   }
 
   return (

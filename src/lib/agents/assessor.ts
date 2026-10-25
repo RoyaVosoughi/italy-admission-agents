@@ -25,7 +25,7 @@ export async function runAssessor(ctx: RunContext, profile: ClientProfile, facts
     agent: "assessor",
     role: ROLE,
     prompt: `Client profile:\n${json(profile)}\n\nComputed facts:\n${json(facts)}`,
-    temperature: 0.3,
+    temperature: 0.2,
     lessons: await ctx.lessons("assessor"),
   });
   ctx.addUsage(usage);

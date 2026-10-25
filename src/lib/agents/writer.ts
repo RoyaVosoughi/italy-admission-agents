@@ -92,7 +92,7 @@ export async function runWriter(
     agent: "writer",
     role: ROLE(ctx.intake, ctx.today),
     prompt,
-    temperature: rewrite ? 0.4 : 0.6,
+    temperature: rewrite ? 0.2 : 0.3,
     maxOutputTokens: 16_000,
     lessons: await ctx.lessons("writer"),
   });

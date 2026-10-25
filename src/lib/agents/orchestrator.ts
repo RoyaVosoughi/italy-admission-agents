@@ -2,6 +2,8 @@
 // agents; ORDER, LOOPS, LIMITS and GATES live here, where they are predictable, debuggable
 // and testable. The Manager agent decides what must be redone; this code executes those
 // orders within hard limits and applies the approval gate the Manager cannot override.
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { Usage } from "../ai";
 import { readDocument } from "../docs/read";
 import { Retriever } from "../rag/retrieve";
@@ -38,6 +40,7 @@ export interface RunInput {
   tomanPerEur?: number; // today's free-market rate, for the ISEE estimate
   today?: string;
   intake?: string;
+  force?: boolean; // run again even if the same documents were already assessed
 }
 
 const LIMITS = {
@@ -48,12 +51,34 @@ const LIMITS = {
   llmConcurrency: () => Number(process.env.LLM_CONCURRENCY ?? 2),
 };
 
+/** Same documents + notes + rate + intake = same question. Document names don't matter, their content does. */
+export function fingerprintOf(input: RunInput): string {
+  const docs = input.documents.map((p) => createHash("sha256").update(readFileSync(p)).digest("hex")).sort();
+  const intake = input.intake ?? defaultIntake(input.today ?? new Date().toISOString().slice(0, 10));
+  return createHash("sha256")
+    .update(JSON.stringify({ docs, notes: (input.notes ?? "").trim(), rate: input.tomanPerEur ?? null, intake }))
+    .digest("hex");
+}
+
+/**
+ * An earlier approved (or needs-input) run of the very same question for this client. Reusing it gives the
+ * client the identical answer every time and spends no model calls. Blocked and failed runs are not reused:
+ * running those again is the point.
+ */
+export async function findReusableRun(input: RunInput, store: Store = getStore()): Promise<Run | null> {
+  if (input.force) return null;
+  const fp = fingerprintOf(input);
+  const runs = await store.listRuns();
+  return runs.find((r) => r.clientId === input.clientFolder && r.fingerprint === fp && (r.status === "approved" || r.status === "needs_input")) ?? null;
+}
+
 export async function startRun(input: RunInput, store: Store = getStore()): Promise<Run> {
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const run = await store.createRun({
     clientId: input.clientFolder,
     status: "running",
-    inputs: { documents: input.documents, notes: input.notes, today },
+    inputs: { documents: input.documents, notes: input.notes, today, tomanPerEur: input.tomanPerEur },
+    fingerprint: fingerprintOf(input),
   });
   return run;
 }
@@ -369,7 +394,8 @@ export async function executeRun(runId: string, input: RunInput, store: Store = 
   } catch (e) {
     const msg = e instanceof StepError ? `${e.step}: ${e.cause.message}` : (e as Error).message;
     await store.updateRun(runId, { status: "error", error: msg, finishedAt: new Date().toISOString() });
-    await learn().catch(() => undefined);
+    // A bad upload (empty or unreadable file) says nothing about how the agents behave: no lesson from it.
+    if (!(e instanceof StepError && e.step.startsWith("Read client documents"))) await learn().catch(() => undefined);
     return (await store.getRun(runId))!;
   }
 
