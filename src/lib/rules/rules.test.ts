@@ -1,3 +1,4 @@
+import { requirementsExcerpt } from "../agents/verifier";
 import { htmlToText } from "../tools/tavily";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -393,4 +394,12 @@ test("translation check accepts a written-out date for an ISO date, and still ca
 test("data-field citations without the KB prefix also become computed facts", () => {
   assert.equal(stripDataKeyTags("| CIMEA | 2027-01-24 | (assessment, expected) |"), "| CIMEA | 2027-01-24 | (computed facts, expected) |");
   assert.equal(stripDataKeyTags("text (assessment)"), "text");
+});
+
+test("requirementsExcerpt keeps the admission passages of a long page", () => {
+  const filler = "Campus life and sports facilities are described here. ".repeat(200);
+  const text = `${filler}Admission requirements: applicants need at least 30 CFU in political science and a minimum grade of 24/30.${filler}`;
+  const out = requirementsExcerpt([{ url: "https://www.unipd.it/x", text, hash: "h", fetchedAt: "2026-10-26" }]);
+  assert.match(out, /30 CFU in political science/);
+  assert.ok(out.length < text.length / 2, "a long page is reduced to the relevant windows");
 });

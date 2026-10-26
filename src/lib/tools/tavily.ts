@@ -29,6 +29,7 @@ interface TavilyResponse {
 export class Tavily {
   used = 0;
   private pages = new Map<string, PageText>();
+  private searches = new Map<string, SearchResult[]>();
 
   constructor(
     private opts: { maxCalls?: number; clientNames?: string[]; apiKey?: string } = {},
@@ -69,15 +70,21 @@ export class Tavily {
   /** Searches the web and keeps official results only. `domains` narrows the search further. */
   async search(query: string, opts: { domains?: string[]; maxResults?: number } = {}): Promise<SearchResult[]> {
     assertNoPii(query, this.opts.clientNames);
+    // The same question asked twice in a run (reading requirements, then verifying facts) costs one credit.
+    const cacheKey = JSON.stringify([query, opts.domains ?? [], opts.maxResults ?? 8]);
+    const hit = this.searches.get(cacheKey);
+    if (hit) return hit;
     const json = await this.call("search", {
       query,
       search_depth: "basic", // 1 credit instead of 2; page text comes from extract anyway
       max_results: opts.maxResults ?? 8,
       ...(opts.domains?.length ? { include_domains: opts.domains } : {}),
     });
-    return (json.results ?? [])
+    const found = (json.results ?? [])
       .filter((r) => isOfficialUrl(r.url))
       .map((r) => ({ url: r.url, title: r.title ?? "", content: r.content ?? "" }));
+    this.searches.set(cacheKey, found);
+    return found;
   }
 
   /** Fetches full page text (cached per run). Only official URLs are fetched. */

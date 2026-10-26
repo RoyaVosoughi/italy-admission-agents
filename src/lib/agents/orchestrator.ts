@@ -29,9 +29,9 @@ import { runManager, runManagerSpotCheck } from "./manager";
 import { runScholarship, type ScholarshipResult } from "./scholarship";
 import { runScout } from "./scout";
 import { runTranslator } from "./translator";
-import { verifyGroup, type VerifyGroup } from "./verifier";
+import { gatherPages, requirementsExcerpt, verifyGroup, type VerifyGroup } from "./verifier";
 import { runWriter, type WriterInput } from "./writer";
-import type { ChanceRating, ManagerDecision } from "./types";
+import type { Candidate, ChanceRating, ManagerDecision } from "./types";
 
 export interface RunInput {
   clientFolder: string; // folder name under immigration files/clients, e.g. "sara-mohammadi"
@@ -46,6 +46,7 @@ export interface RunInput {
 const LIMITS = {
   managerRounds: () => Number(process.env.MAX_MANAGER_ROUNDS ?? 3),
   approveThreshold: () => Number(process.env.APPROVE_THRESHOLD ?? 85),
+  prefetchReserve: 16, // credits kept for fact-checking, the scholarship bodies, the embassy and the Manager
   managerWebReserve: 6, // Tavily calls kept back for the Manager's independent spot-check
   verifyUniversities: 8, // every shortlisted university (shortlist max is 8)
   llmConcurrency: () => Number(process.env.LLM_CONCURRENCY ?? 2),
@@ -147,9 +148,25 @@ export async function executeRun(runId: string, input: RunInput, store: Store = 
     );
 
     // ---- 3. Admission chances in parallel, then the code-enforced shortlist
+    // ---- 3a. What each university's own pages say about admission (verbatim), before anything is rated
+    const requirements = new Map<string, string>();
+    const webPool = limiter(3);
+    await step("verifier", `Read official admission requirements (${candidates.length})`, async () => {
+      await Promise.all(
+        candidates.map((c) =>
+          webPool(async () => {
+            if (web.remaining <= LIMITS.prefetchReserve) return;
+            const pages = await gatherPages(ctx, candidateGroup(ctx, c)).catch(() => []);
+            if (pages.length) requirements.set(c.id, requirementsExcerpt(pages));
+          }),
+        ),
+      );
+      return [...requirements.keys()];
+    }, (ids) => `${ids.length}/${candidates.length} programmes: requirements read from the university's own pages`);
+
     const pool = limiter(LIMITS.llmConcurrency());
     const ratings = await step("analyst", `Rate admission chances (${candidates.length})`, () =>
-      Promise.all(candidates.map((c) => pool(() => runAnalyst(ctx, profile, facts, c)))),
+      Promise.all(candidates.map((c) => pool(() => runAnalyst(ctx, profile, facts, c, undefined, requirements.get(c.id))))),
       (r) => r.map((x) => `${x.candidateId}: ${x.tier} ${x.score}`).join("; "),
     );
     let picked = await step("rules", "Select shortlist", async () => shortlist(candidates, ratings, profile.preferences), (s) =>
@@ -339,7 +356,7 @@ export async function executeRun(runId: string, input: RunInput, store: Store = 
             case "analyst":
               if (targets.length) {
                 const fresh = new Map<Ranked, ChanceRating>();
-                for (const t of targets) fresh.set(t, await runAnalyst(ctx, profile, facts, t.candidate, { instruction: correctionsFor(`analyst:${t.candidate.id}`, o.instruction), previous: t.rating.features }));
+                for (const t of targets) fresh.set(t, await runAnalyst(ctx, profile, facts, t.candidate, { instruction: correctionsFor(`analyst:${t.candidate.id}`, o.instruction), previous: t.rating.features }, requirements.get(t.candidate.id)));
                 const all = ranked.map((r) => (fresh.has(r) ? { ...r, rating: fresh.get(r)! } : r));
                 picked = shortlist(all.map((r) => r.candidate), all.map((r) => r.rating), profile.preferences);
                 ranked = picked.selected;
@@ -466,35 +483,37 @@ function knownOfficialUrls(ctx: RunContext, chunkIds: string[]): string[] {
   return [...new Set(chunkIds.flatMap((id) => ctx.retriever.get(id)?.urls ?? []).filter(isOfficialUrl))];
 }
 
+/** What to look up on the web for one candidate programme. The same group is used to read its requirements before
+ *  rating and to verify its facts afterwards, so the searches and pages are shared (cached) between the two. */
+function candidateGroup(ctx: RunContext, c: Candidate, kbDeadline: string | null = null): VerifyGroup {
+  const domains = [
+    ...new Set(
+      c.sourceChunkIds
+        .flatMap((id) => ctx.retriever.get(id)?.urls ?? [])
+        .filter(isOfficialUrl)
+        .map((u) => hostOf(u)!)
+        .filter((h) => !DSU_HOST.test(h)),
+    ),
+  ].slice(0, 3);
+  return {
+    key: c.university,
+    knownUrls: knownOfficialUrls(ctx, c.sourceChunkIds).filter((u) => !DSU_HOST.test(hostOf(u) ?? "")),
+    altQuery: `${c.university} corso di laurea magistrale ${c.programName ?? c.programArea} studenti internazionali scadenza requisiti lingua inglese`,
+    query: `${c.university} ${c.programName ?? c.programArea} international students admission ${ctx.intake} application deadline English requirement`,
+    domains,
+    facts: [
+      { claimId: `${c.id}:deadline`, claim: `Application deadline for non-EU (visa) applicants, ${c.programName ?? c.programArea}, ${ctx.intake}`, kbValue: kbDeadline },
+      { claimId: `${c.id}:language`, claim: `English language requirement (IELTS/TOEFL minimum) for ${c.programName ?? c.programArea}`, kbValue: null },
+      { claimId: `${c.id}:programme`, claim: programmeExistsClaim(c), kbValue: null },
+    ],
+  };
+}
+
 /** Code decides what must be verified: per university, per DSU body, plus the embassy funds rule. */
 function buildVerifyGroups(ctx: RunContext, ranked: Ranked[], scholarships: ScholarshipResult[]): VerifyGroup[] {
   const groups: VerifyGroup[] = [];
   const plan = new Map(scholarships.map((s) => [s.plan.candidateId, s.plan]));
-  for (const { candidate: c } of ranked.slice(0, LIMITS.verifyUniversities)) {
-    const domains = [
-      ...new Set(
-        c.sourceChunkIds
-          .flatMap((id) => ctx.retriever.get(id)?.urls ?? [])
-          .filter(isOfficialUrl)
-          .map((u) => hostOf(u)!)
-          .filter((h) => !DSU_HOST.test(h)),
-      ),
-    ].slice(0, 3);
-    const p = plan.get(c.id);
-    const known = knownOfficialUrls(ctx, c.sourceChunkIds);
-    groups.push({
-      key: c.university,
-      knownUrls: known.filter((u) => !DSU_HOST.test(hostOf(u) ?? "")),
-      altQuery: `${c.university} corso di laurea magistrale ${c.programName ?? c.programArea} studenti internazionali scadenza requisiti lingua inglese`,
-      query: `${c.university} ${c.programName ?? c.programArea} international students admission ${ctx.intake} application deadline English requirement`,
-      domains,
-      facts: [
-        { claimId: `${c.id}:deadline`, claim: `Application deadline for non-EU (visa) applicants, ${c.programName ?? c.programArea}, ${ctx.intake}`, kbValue: p?.deadlines.admission ?? null },
-        { claimId: `${c.id}:language`, claim: `English language requirement (IELTS/TOEFL minimum) for ${c.programName ?? c.programArea}`, kbValue: null },
-        { claimId: `${c.id}:programme`, claim: programmeExistsClaim(c), kbValue: null },
-      ],
-    });
-  }
+  for (const { candidate: c } of ranked.slice(0, LIMITS.verifyUniversities)) groups.push(candidateGroup(ctx, c, plan.get(c.id)?.deadlines.admission ?? null));
   const seen = new Set<string>();
   for (const s of scholarships) {
     if (seen.has(s.plan.dsuBody)) continue;

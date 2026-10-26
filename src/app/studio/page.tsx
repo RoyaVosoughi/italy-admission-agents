@@ -222,6 +222,7 @@ function CurrentStep({ label }: { label: string }) {
       ["Rate", "analyst"],
       ["scholarship", "scholarship"],
       ["Verify", "verifier"],
+      ["Read official", "verifier"],
       ["Write", "writer"],
       ["Rewrite", "writer"],
       ["Manager", "manager"],

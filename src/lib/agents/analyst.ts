@@ -11,6 +11,11 @@ You are an admissions analyst. For ONE candidate programme, read the evidence an
 admission factor for this client. Be conservative: when the evidence is silent, use "unknown" rather
 than an optimistic value.
 
+- Read the official admission pages when they are given: copy a stated minimum grade into gpaRequirement30
+  (convert /110 by x30/110), set prerequisites from the credits (CFU/ECTS) a programme requires in particular
+  subjects compared with the client's degree, entranceTest from any test or selection stage, nonEuQuota from places
+  reserved for non-EU applicants outside Italy, and language from the stated certificate level. Quote the page
+  (its URL) in the rationale.
 - Candidates from the official MUR catalogue state their access type in whyFit: "accesso libero" means no
   entrance test (entranceTest none); "locale" or "nazionale" means a limited-places admission test is required.
 - fieldMatch: compare the PROGRAMME's discipline with the discipline of the client's COMPLETED degree (not with
@@ -33,6 +38,7 @@ export async function runAnalyst(
   facts: ProfileFacts,
   candidate: Candidate,
   correction?: { instruction: string; previous: ChanceFeatures },
+  officialPages?: string,
 ): Promise<ChanceRating> {
   const extra = await ctx.retriever.search(
     `${candidate.university} ${candidate.programArea} admission requirements international applicants deadline language`,
@@ -57,6 +63,9 @@ export async function runAnalyst(
           `The score is computed by code from these features, so change the specific feature(s) the Manager's point is about ` +
           `(e.g. competitiveness very_high, gpaRequirement30, nonEuQuota) if the evidence or the point is sound; keep the others.`
         : "",
+      officialPages
+        ? `Official admission pages of this university (verbatim; they outrank the knowledge-base excerpts when they state a requirement):\n\n${officialPages}`
+        : "No official admission page could be read for this programme: classify what you cannot see as unknown.",
       `Evidence:\n\n${evidence}`,
     ].join("\n\n"),
     temperature: 0.2,

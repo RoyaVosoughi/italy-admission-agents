@@ -60,6 +60,38 @@ export function pageExcerpts(page: PageText, keywords: RegExp, radius = 500, max
 
 const KEYWORDS = /deadline|scadenz|closes|application|apply|IELTS|TOEFL|B2|ISEE|ISPE|borsa|scholarship|202[6-8]|€|euro|requirement|requisit/;
 
+/**
+ * The official pages for one group: first the pages the knowledge base already points to (free), then search;
+ * the Italian second query runs only if the first brought nothing. Pages and searches are cached for the run,
+ * so reading a programme's requirements before rating it and verifying its facts later cost the same credits.
+ */
+export async function gatherPages(ctx: RunContext, group: VerifyGroup): Promise<PageText[]> {
+  const pages: PageText[] = group.knownUrls?.length ? await ctx.web.fetchDirect(group.knownUrls.slice(0, 3)) : [];
+  const searched = async (query: string) => {
+    if (ctx.web.remaining < 2) return;
+    const results = await ctx.web.search(query, { domains: group.domains, maxResults: 6 }).catch(() => []);
+    const urls = results.map((r) => r.url).filter((u) => !pages.some((p) => p.url === u)).slice(0, 3);
+    const direct = await ctx.web.fetchDirect(urls);
+    pages.push(...direct);
+    const rest = urls.filter((u) => !direct.some((p) => p.url === u));
+    if (rest.length && ctx.web.remaining >= 2) pages.push(...(await ctx.web.extract(rest).catch(() => [])));
+  };
+  await searched(group.query);
+  if (!pages.length && group.altQuery) await searched(group.altQuery);
+  return pages.slice(0, 5);
+}
+
+const REQ_KEYWORDS = /requirement|requisit|eligib|prerequisite|admission|ammission|accesso|CFU|ECTS|credits|GPA|grade|voto|minimum|minimo|IELTS|TOEFL|B2|C1|entrance|test|quota|places|posti|non-EU|selection|selezione|laurea/i;
+
+/** The admission-requirement passages of the official pages, verbatim, for the analyst to read. */
+export function requirementsExcerpt(pages: PageText[], maxChars = 9000): string {
+  return pages
+    .slice(0, 3)
+    .map((p) => `=== ${p.url} ===\n${pageExcerpts(p, REQ_KEYWORDS, 450, 4000)}`)
+    .join("\n\n")
+    .slice(0, maxChars);
+}
+
 export async function verifyGroup(
   ctx: RunContext,
   group: VerifyGroup,
@@ -82,22 +114,8 @@ export async function verifyGroup(
       note: why,
     }));
 
-  // 1. pages the knowledge base already points to (free, direct fetch)
-  const pages: PageText[] = group.knownUrls?.length ? await ctx.web.fetchDirect(group.knownUrls.slice(0, 3)) : [];
-  // 2. search for more; the second query runs only if the first brought no official page
-  const searched = async (query: string) => {
-    if (ctx.web.remaining < 2) return;
-    const results = await ctx.web.search(query, { domains: group.domains, maxResults: 6 }).catch(() => []);
-    const urls = results.map((r) => r.url).filter((u) => !pages.some((p) => p.url === u)).slice(0, 3);
-    const direct = await ctx.web.fetchDirect(urls);
-    pages.push(...direct);
-    const rest = urls.filter((u) => !direct.some((p) => p.url === u));
-    if (rest.length && ctx.web.remaining >= 2) pages.push(...(await ctx.web.extract(rest).catch(() => [])));
-  };
-  await searched(group.query);
-  if (!pages.length && group.altQuery) await searched(group.altQuery);
+  const pages = await gatherPages(ctx, group);
   if (!pages.length) return notFound(ctx.web.remaining < 2 ? "web budget used up" : "no official page found");
-  pages.splice(5);
 
   const excerpts = pages.map((p) => `=== ${p.url} ===\n${pageExcerpts(p, KEYWORDS)}`).join("\n\n");
   const { data, usage } = await runAgentJSON(Output, {
